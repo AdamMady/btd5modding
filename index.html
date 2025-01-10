@@ -2,24 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>BTD5 LIVE Editor</title>
+  <title>BTD5 Tower Editor</title>
   <style>
-    /* Minimal reset */
-    * {
-      margin: 0; 
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: "Segoe UI", Roboto, Arial, sans-serif;
-      background: #f5f5f5;
-      color: #333;
-      height: 100vh;
+      font-family: "Segoe UI", sans-serif;
       display: flex;
       flex-direction: column;
+      height: 100vh;
+      background: #f5f5f5;
+      color: #333;
     }
-
-    /* Header bar */
     #topBar {
       display: flex;
       align-items: center;
@@ -28,84 +21,44 @@
       padding: 0.5em;
     }
     #selectFolderBtn {
-      background: #4caf50;
-      border: none;
-      color: #fff;
-      padding: 0.6em 1.2em;
-      font-size: 1em;
-      cursor: pointer;
-      border-radius: 4px;
+      background: #4caf50; border: none; color: #fff;
+      padding: 0.6em 1.2em; font-size: 1em; cursor: pointer; border-radius: 4px;
       margin-right: 1em;
     }
-    #selectFolderBtn:hover {
-      background: #45a049;
-    }
+    #selectFolderBtn:hover { background: #45a049; }
     #statusMsg {
-      font-size: 0.9em;
-      color: #ccc;
-      margin-right: auto; /* push the resetAllBtn to the right */
-      margin-left: 0.5em;
+      font-size: 0.9em; color: #ccc; margin-right: auto; margin-left: 0.5em;
     }
     #resetAllBtn {
-      background: #ff5c5c;
-      border: none;
-      color: #fff;
-      padding: 0.6em 1.2em;
-      font-size: 1em;
-      cursor: pointer;
-      border-radius: 4px;
+      background: #ff5c5c; border: none; color: #fff;
+      padding: 0.6em 1.2em; font-size: 1em; cursor: pointer; border-radius: 4px;
       margin-left: 1em;
     }
-    #resetAllBtn:hover {
-      background: #e54848;
-    }
-
-    /* Main container: left (folder tree) + right (editor) */
+    #resetAllBtn:hover { background: #e54848; }
     #container {
-      flex: 1;
-      display: flex;
-      height: calc(100vh - 50px);
+      flex: 1; display: flex; height: calc(100vh - 50px);
     }
-
-    /* Left panel: folder tree & search bar */
     #folderListPanel {
-      background: #fff;
-      border-right: 1px solid #ccc;
-      padding: 0.75em;
-      resize: horizontal;
-      overflow: auto;
-      width: 300px; 
-      min-width: 150px;
-      max-width: 800px;
-      display: flex;
-      flex-direction: column;
+      background: #fff; border-right: 1px solid #ccc;
+      padding: 0.75em; resize: horizontal; overflow: auto;
+      width: 300px; min-width: 150px; max-width: 800px;
+      display: flex; flex-direction: column;
     }
     #searchInput {
-      margin-bottom: 0.5em;
-      padding: 0.4em;
-      width: 100%;
-      border: 1px solid #ccc;
-      border-radius: 4px;
+      margin-bottom: 0.5em; padding: 0.4em;
+      border: 1px solid #ccc; border-radius: 4px;
     }
-
-    /* Right panel: editor */
-    #editorPanel {
-      flex: 1;
-      padding: 0.75em;
-      overflow-y: auto;
-    }
-
-    /* Folder / file listings */
     #folderTree {
-      flex: 1;
-      overflow-y: auto;
+      flex: 1; overflow-y: auto;
     }
+    #editorPanel {
+      flex: 1; padding: 0.75em; overflow-y: auto;
+    }
+
     .folderItem, .fileItem {
-      display: flex;
-      align-items: center;
+      display: flex; align-items: center;
+      margin: 0.2em 0; padding: 0.2em 0;
       cursor: pointer;
-      margin: 0.2em 0;
-      padding: 0.2em 0;
     }
     .folderItem:hover, .fileItem:hover {
       background: #eee;
@@ -113,122 +66,100 @@
     .folderIcon, .fileIcon {
       margin-right: 0.4em;
     }
-    .folderItem b {
-      font-weight: bold;
-    }
+    .folderItem b { font-weight: bold; }
 
-    /* Editor styling */
-    h2 {
-      margin-bottom: 0.5em;
-      font-size: 1.2em;
-    }
+    h2 { margin-bottom: 0.5em; font-size: 1.2em; }
     .editorTable {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 0.5em;
-      background: #fff;
+      width: 100%; border-collapse: collapse; margin-top: 0.5em; background: #fff;
     }
     .editorTable thead th {
-      background: #f0f0f0;
-      text-align: left;
-      padding: 0.4em;
-      border-bottom: 1px solid #ccc;
-      font-weight: normal;
+      background: #f0f0f0; text-align: left; padding: 0.4em;
+      border-bottom: 1px solid #ccc; font-weight: normal;
     }
     .editorTable tbody td {
-      border-bottom: 1px solid #eee;
-      padding: 0.4em;
-      vertical-align: middle;
+      border-bottom: 1px solid #eee; padding: 0.4em; vertical-align: middle;
     }
     .editorTable input[type="text"] {
-      width: 80%;
-      padding: 0.2em;
+      width: 80%; padding: 0.2em;
     }
     .revertBtn {
-      margin-left: 0.5em;
-      cursor: pointer;
-      background: none;
-      border: none;
-      font-size: 1.1em;
-      color: #666;
+      margin-left: 0.5em; cursor: pointer; background: none; border: none;
+      font-size: 1.1em; color: #666;
     }
-    .revertBtn:hover {
-      color: #111;
-    }
+    .revertBtn:hover { color: #111; }
 
-    /* Scrolling fix on smaller screens */
     @media (max-width: 768px) {
-      #container {
-        flex-direction: column;
-      }
-      #folderListPanel {
-        width: 100%;
-        height: 250px;
-        resize: none; /* On mobile, can't easily drag */
-      }
-      #editorPanel {
-        height: calc(100vh - 300px);
-      }
+      #container { flex-direction: column; }
+      #folderListPanel { width: 100%; height: 250px; resize: none; }
+      #editorPanel { height: calc(100vh - 300px); }
     }
   </style>
 </head>
 <body>
-  <!-- Top bar -->
-  <div id="topBar">
-    <button id="selectFolderBtn">Select Folder</button>
-    <span id="statusMsg">No folder selected</span>
-    <button id="resetAllBtn" class="hidden">Reset All to Default</button>
-  </div>
+<div id="topBar">
+  <button id="selectFolderBtn">Select Folder</button>
+  <span id="statusMsg">No folder selected</span>
+  <button id="resetAllBtn" class="hidden">Reset All to Default</button>
+</div>
 
-  <!-- Main container -->
-  <div id="container">
-    <!-- Left side: folder list + search -->
-    <div id="folderListPanel">
-      <input type="text" id="searchInput" placeholder="Search files..." />
-      <h2>Folder View</h2>
-      <div id="folderTree"></div>
-    </div>
-
-    <!-- Right side: editor -->
-    <div id="editorPanel">
-      <h2 id="editorTitle">No file selected</h2>
-      <div id="editorContent"></div>
-    </div>
+<div id="container">
+  <div id="folderListPanel">
+    <input type="text" id="searchInput" placeholder="Search files..." />
+    <h2>Folder View</h2>
+    <div id="folderTree"></div>
   </div>
+  <div id="editorPanel">
+    <h2 id="editorTitle">No file selected</h2>
+    <div id="editorContent"></div>
+  </div>
+</div>
 
 <script>
 /**************************************************************
- * We'll rely on the File System Access API in Chromium-based
- * browsers on HTTPS/localhost.
+ * This approach modifies raw text to keep .0 for floats.
+ * We detect floats if raw text had a decimal point initially.
+ * Then every time you edit, we locate that substring in raw text
+ * and replace it with e.g. "3.0" or "3.14" to preserve decimals.
  **************************************************************/
-let rootDirectoryHandle = null;
-let folderStructure = null; // pruned structure with only .weapon/.upgrades
-let originalStructure = null; // unfiltered copy for search
-
-// Keep track of each file's data: { fileHandle -> { jsonData, originalJson, numericFields[] } }
-let editableFilesMap = new Map();
-// Currently displayed file
-let currentFileHandle = null;
 
 /**************************************************************
- * DETECT .weapon/.upgrades
+ * GLOBALS
+ **************************************************************/
+let rootDirectoryHandle = null;
+let folderStructure = null; 
+let originalStructure = null; // for search
+let currentFileHandle = null;
+
+// For each file, we store an object { rawText, jsonData, fields[], originalJsonData }
+const editableFilesMap = new Map();
+
+// Each field in "fields[]" is:
+// {
+//   path: "some.nested.key",
+//   isFloat: true/false,
+//   startIndex: <number> index in rawText where numeric substring begins
+//   endIndex: <number> index in rawText where numeric substring ends
+//   currentVal: <number> current numeric value
+//   originalVal: <number> the original numeric value
+// }
+
+/**************************************************************
+ * DETECT EDITABLE FILES
  **************************************************************/
 function isEditableFile(name) {
   const lower = name.toLowerCase();
   return lower.endsWith(".weapon") || lower.endsWith(".upgrades");
 }
 function removeExtension(fileName) {
-  // remove .weapon or .upgrades
   return fileName.replace(/(\.weapon|\.upgrades)$/i, "");
 }
 
 /**************************************************************
- * Build a pruned folder structure
+ * BUILD FOLDER STRUCTURE (only .weapon/.upgrades)
  **************************************************************/
 async function buildFolderStructure(dirHandle) {
   const subFolders = {};
   const files = {};
-
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind === "directory") {
       const child = await buildFolderStructure(handle);
@@ -242,10 +173,8 @@ async function buildFolderStructure(dirHandle) {
       }
     }
   }
-
-  const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
-  if (!hasContent) return null;
-  return { subFolders, files, handle: dirHandle };
+  const hasContent = (Object.keys(subFolders).length || Object.keys(files).length);
+  return hasContent ? { subFolders, files, handle: dirHandle } : null;
 }
 
 /**************************************************************
@@ -253,11 +182,9 @@ async function buildFolderStructure(dirHandle) {
  **************************************************************/
 function renderFolderTree(structure, container, level=0) {
   if (!structure) return;
-
   // subFolders
   for (const folderName in structure.subFolders) {
     const folderNode = structure.subFolders[folderName];
-
     const folderDiv = document.createElement("div");
     folderDiv.className = "folderItem";
     folderDiv.style.marginLeft = (level * 1.2) + "em";
@@ -272,9 +199,8 @@ function renderFolderTree(structure, container, level=0) {
     folderDiv.appendChild(folderLabel);
 
     container.appendChild(folderDiv);
-    renderFolderTree(folderNode, container, level + 1);
+    renderFolderTree(folderNode, container, level+1);
   }
-
   // files
   for (const fileName in structure.files) {
     const fileHandle = structure.files[fileName];
@@ -293,160 +219,171 @@ function renderFolderTree(structure, container, level=0) {
     fileLabel.textContent = displayName;
     fileDiv.appendChild(fileLabel);
 
-    fileDiv.onclick = async () => {
-      showEditorForFile(fileHandle, fileName, displayName);
-    };
-
+    fileDiv.onclick = () => showEditorForFile(fileHandle, fileName, displayName);
     container.appendChild(fileDiv);
   }
 }
 
 /**************************************************************
- * LOAD & SAVE JSON
- * 
- * To detect float vs integer, we do a raw-text pass for each numeric field
- * *before* we parse. If we see a decimal point in the raw text, we mark it float.
+ * READ FILE & DETECT FLOAT vs. INT
+ * Also find the substring indices for each numeric field in raw text.
  **************************************************************/
-async function readJson(fileHandle) {
+async function loadFileData(fileHandle) {
   const fileData = await fileHandle.getFile();
-  const text = await fileData.text();
+  const rawText = await fileData.text();
   let parsed = {};
   try {
-    parsed = JSON.parse(text);
-  } catch (err) {
-    console.error("JSON parse error:", fileHandle.name, err);
+    parsed = JSON.parse(rawText);
+  } catch(e) {
+    console.warn("Failed to parse JSON:", fileHandle.name, e);
   }
-  return { rawText: text, parsed };
-}
+  const originalJsonData = JSON.parse(JSON.stringify(parsed)); // clone
 
-async function writeJson(fileHandle, jsonObj) {
-  try {
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(jsonObj, null, 2));
-    await writable.close();
-  } catch (err) {
-    console.error("Error writing file:", fileHandle.name, err);
-  }
+  // We'll gather the numeric fields with path + substring indices
+  const fields = [];
+  gatherNumericFields(parsed, "", rawText, fields);
+
+  return { rawText, jsonData: parsed, fields, originalJsonData };
 }
 
 /**************************************************************
- * DETECT NUMERIC FIELDS
+ * GATHER NUMERIC FIELDS
+ * We recursively search parsed JSON, and for each numeric field:
+ * 1) We find the substring in rawText
+ * 2) We store startIndex, endIndex, isFloat, etc.
  **************************************************************/
-function collectNumericFields(jsonObj, parentPath="", rawText) {
-  // We'll return an array of { path, value, originalIsFloat }
-  // We'll detect originalIsFloat by scanning rawText if possible.
-  const result = [];
-  for (let key in jsonObj) {
-    if (!jsonObj.hasOwnProperty(key)) continue;
-    const val = jsonObj[key];
-    const fullPath = parentPath ? parentPath + "." + key : key;
-
-    if (val && typeof val === "object") {
-      result.push(...collectNumericFields(val, fullPath, rawText));
+function gatherNumericFields(obj, pathSoFar, rawText, fields) {
+  for (let key in obj) {
+    if (!obj.hasOwnProperty(key)) continue;
+    const fullPath = pathSoFar ? pathSoFar + "." + key : key;
+    const val = obj[key];
+    if (typeof val === "object" && val !== null) {
+      gatherNumericFields(val, fullPath, rawText, fields);
     } else if (typeof val === "number") {
-      // detect float by searching rawText for the substring
-      const maybeFloat = checkIfOriginallyFloat(fullPath, val, rawText);
-      result.push({
-        path: fullPath,
-        value: val,
-        originalIsFloat: maybeFloat
-      });
+      // find numeric substring in rawText
+      const { startIndex, endIndex, isFloat } = findNumericSubstringInRaw(fullPath, val, rawText);
+      if (startIndex !== -1) {
+        fields.push({
+          path: fullPath,
+          currentVal: val,
+          originalVal: val,
+          isFloat,
+          startIndex,
+          endIndex
+        });
+      }
     }
   }
-  return result;
-}
-
-/**
- * Heuristic to see if original JSON had a decimal:
- * - We search for the pattern: "<key>" : [someNumber], ignoring spaces
- * - If we find that someNumber has a '.', we consider it float
- * - If the number is negative or includes exponent, handle that too if needed
- */
-function checkIfOriginallyFloat(path, val, rawText) {
-  // We'll try a rough approach:
-  // 1) Extract the last part of path => the key
-  const lastDotIndex = path.lastIndexOf(".");
-  const keyName = lastDotIndex === -1 ? path : path.substring(lastDotIndex + 1);
-
-  // 2) Build a rough pattern: "keyName": maybe with quotes
-  //    We'll remove quotes from keyName if any
-  //    Then we try a regex that finds "keyName"\s*:\s*([\-\d\.eE]+)
-  //    and checks if that group has a decimal point.
-  const regexKey = keyName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"); // escape
-  const re = new RegExp(`["']${regexKey}["']\\s*:\\s*([\\-\\+]?\\d+(\\.\\d+)?([eE][\\-\\+]?\\d+)?)(\\s|,|}|])`);
-
-  // We'll remove newlines/spaces for easier matching, or we can just keep them
-  // but the pattern tries to handle spacing with \\s* anyway
-  // Let's just do a normal match:
-  const match = re.exec(rawText);
-  if (!match) {
-    // not found => fallback
-    // if val is integer => false
-    // else => true
-    return !Number.isInteger(val);
-  }
-  // match[1] is the numeric substring
-  const numericStr = match[1];
-  // If it has '.', we consider it float
-  if (numericStr.includes(".")) {
-    return true;
-  }
-  return false;
 }
 
 /**************************************************************
- * SHOW EDITOR
+ * FIND NUMERIC SUBSTRING
+ * Rough approach: We search for: "<key>" : [someNumber]
+ * Then see if that someNumber has a decimal (-> isFloat),
+ * and we return startIndex, endIndex in the rawText.
+ **************************************************************/
+function findNumericSubstringInRaw(path, val, rawText) {
+  // Key is the last part of the path
+  const lastDot = path.lastIndexOf(".");
+  const keyName = lastDot >= 0 ? path.substring(lastDot+1) : path;
+  // Build a pattern:  "keyName": maybe with optional spaces
+  // Then numeric pattern: ([+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)
+  // We'll do a lazy approach: we'll pick the first occurrence that matches the actual number
+  // This can fail if the same numeric value appears multiple times. 
+  // But hopefully for typical BTD5 .weapon files, it matches unique keys.
+
+  const safeKey = keyName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  // We also need to incorporate the actual numeric value into the pattern 
+  // so we only match the substring that has that exact number.
+  // We'll convert val to string. If it's an integer, "3", if float "3.14"
+  // If val is something like 3, let's also consider that we might have "3.0" in the file. 
+  // Actually we can do a simpler approach: we search for  "keyName": * <someNumber> 
+  // then parse that substring to see if there's a decimal.
+
+  const numRegexStr = "([+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?)";
+  // We'll capture the numeric substring. Then we see if it has '.' to decide isFloat.
+  // We'll do something like: /"keyName"\s*:\s*(-?\d+(\.\d+)?([eE][+\-]?\d+)?)/
+
+  const re = new RegExp(`["']${safeKey}["']\\s*:\\s*${numRegexStr}`);
+  const match = re.exec(rawText);
+  if (!match) {
+    return { startIndex: -1, endIndex: -1, isFloat: false };
+  }
+  const numericStr = match[1];
+  const startIndex = match.index + match[0].lastIndexOf(numericStr);
+  const endIndex = startIndex + numericStr.length;
+
+  const isFloat = numericStr.includes(".");
+  return { startIndex, endIndex, isFloat };
+}
+
+/**************************************************************
+ * PATCH RAW TEXT
+ * We replace the substring from startIndex..endIndex with newStr.
+ * Then we adjust the difference for subsequent fields.
+ **************************************************************/
+function patchRawText(fileData, field, newStr) {
+  const oldLen = field.endIndex - field.startIndex;
+  const diff = newStr.length - oldLen;
+
+  const before = fileData.rawText.substring(0, field.startIndex);
+  const after = fileData.rawText.substring(field.endIndex);
+  fileData.rawText = before + newStr + after;
+
+  // update field boundaries for subsequent fields 
+  // so we don't overwrite them incorrectly
+  for (let f of fileData.fields) {
+    if (f === field) continue; 
+    if (f.startIndex > field.startIndex) {
+      f.startIndex += diff;
+      f.endIndex += diff;
+    }
+  }
+  // also update field's own boundaries in case we revert again
+  field.endIndex = field.startIndex + newStr.length;
+}
+
+/**************************************************************
+ * SHOW EDITOR FOR A FILE
  **************************************************************/
 async function showEditorForFile(fileHandle, realFileName, displayName) {
   currentFileHandle = fileHandle;
-
   const titleEl = document.getElementById("editorTitle");
   titleEl.textContent = displayName;
 
   const container = document.getElementById("editorContent");
   container.innerHTML = "<p>Loading...</p>";
 
-  // Check map
-  let stored = editableFilesMap.get(fileHandle);
-  if (!stored) {
-    // read from disk
-    const { rawText, parsed } = await readJson(fileHandle);
-    const originalJson = JSON.parse(JSON.stringify(parsed));
-    // Gather numeric fields with float detection
-    const numericFields = collectNumericFields(parsed, "", rawText);
-
-    stored = {
-      jsonData: parsed,
-      originalJson,
-      numericFields
-    };
-    editableFilesMap.set(fileHandle, stored);
+  // Check if loaded
+  let fileData = editableFilesMap.get(fileHandle);
+  if (!fileData) {
+    fileData = await loadFileData(fileHandle);
+    editableFilesMap.set(fileHandle, fileData);
   }
 
-  // Now build a table for numeric fields
-  const { jsonData, originalJson, numericFields } = stored;
-  container.innerHTML = "";
-
-  if (numericFields.length === 0) {
-    container.innerHTML = "<p>No numeric fields found in this file.</p>";
+  if (!fileData.fields || fileData.fields.length === 0) {
+    container.innerHTML = "<p>No numeric fields found.</p>";
     return;
   }
 
+  // Build the table
+  container.innerHTML = "";
   const table = document.createElement("table");
   table.className = "editorTable";
 
   const thead = document.createElement("thead");
-  const trHead = document.createElement("tr");
+  const thr = document.createElement("tr");
   const thPath = document.createElement("th");
   thPath.textContent = "Path";
   const thVal = document.createElement("th");
   thVal.textContent = "Value";
-  trHead.appendChild(thPath);
-  trHead.appendChild(thVal);
-  thead.appendChild(trHead);
+  thr.appendChild(thPath);
+  thr.appendChild(thVal);
+  thead.appendChild(thr);
+  table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-  numericFields.forEach((field) => {
+  fileData.fields.forEach((field) => {
     const tr = document.createElement("tr");
 
     const tdPath = document.createElement("td");
@@ -455,27 +392,30 @@ async function showEditorForFile(fileHandle, realFileName, displayName) {
 
     const tdVal = document.createElement("td");
 
-    // We decide how to show the initial text:
-    // If originalIsFloat, but current value is integer => show e.g. "3.0"
-    const initialStr = formatDisplay(field.value, field.originalIsFloat);
+    // initial text
+    const initialText = formatDisplay(field.currentVal, field.isFloat);
     const input = document.createElement("input");
     input.type = "text";
-    input.value = initialStr;
+    input.value = initialText;
 
     input.onchange = async () => {
-      // parse user input
-      const newVal = parseUserNumber(field.value, input.value, field.originalIsFloat);
-      field.value = newVal;
-      setNestedValue(jsonData, field.path, newVal);
+      const newNum = parseUserNumber(field.currentVal, input.value, field.isFloat);
+      field.currentVal = newNum;
 
-      // Force the text box to reflect the “.0” if needed
-      const forcedStr = formatDisplay(newVal, field.originalIsFloat);
-      input.value = forcedStr;
+      // we must update raw text
+      const newStr = formatDisplay(newNum, field.isFloat);
+      patchRawText(fileData, field, newStr);
 
-      // Write to disk
-      await writeJson(fileHandle, jsonData);
+      // Also update the JSON object in memory
+      // We'll rely on the original path logic
+      setNestedValue(fileData.jsonData, field.path, newNum);
+
+      // Write updated raw text
+      await writeFileRaw(fileHandle, fileData.rawText);
+
+      // Force the input box to show the final version
+      input.value = newStr;
     };
-
     tdVal.appendChild(input);
 
     // Revert button
@@ -484,81 +424,77 @@ async function showEditorForFile(fileHandle, realFileName, displayName) {
     revertBtn.textContent = "🔄";
     revertBtn.title = "Revert to default";
     revertBtn.onclick = async () => {
-      // revert field in memory
-      const origVal = getNestedValue(originalJson, field.path);
-      field.value = origVal;
-      setNestedValue(jsonData, field.path, origVal);
+      const origVal = field.originalVal;
+      field.currentVal = origVal;
 
-      input.value = formatDisplay(origVal, field.originalIsFloat);
+      const revertStr = formatDisplay(origVal, field.isFloat);
+      patchRawText(fileData, field, revertStr);
 
-      await writeJson(fileHandle, jsonData);
+      setNestedValue(fileData.jsonData, field.path, origVal);
+
+      await writeFileRaw(fileHandle, fileData.rawText);
+      input.value = revertStr;
     };
     tdVal.appendChild(revertBtn);
 
     tr.appendChild(tdVal);
     tbody.appendChild(tr);
   });
-
-  table.appendChild(thead);
   table.appendChild(tbody);
   container.appendChild(table);
 }
 
 /**************************************************************
- * INT/FLOAT FORMAT
- * If originalIsFloat == true and user typed integer, show .0
+ * WRITE RAW
  **************************************************************/
-function parseUserNumber(oldVal, newStr, originalIsFloat) {
+async function writeFileRaw(fileHandle, text) {
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(text);
+    await writable.close();
+  } catch (err) {
+    console.error("Error writing file:", fileHandle.name, err);
+  }
+}
+
+/**************************************************************
+ * INT/FLOAT FORMATTING
+ **************************************************************/
+function parseUserNumber(oldVal, newStr, isFloat) {
   const parsed = Number(newStr);
   if (isNaN(parsed)) {
-    return oldVal; // revert
+    return oldVal;
   }
-  if (originalIsFloat) {
-    // If user typed integer, e.g. 3 => 3.0
+  if (isFloat) {
+    // If user typed an integer => show "3.0"
     if (Number.isInteger(parsed)) {
       return parseFloat(parsed.toFixed(1));
     }
     return parsed;
-  } else {
-    // It's originally an integer => no decimals
-    return Math.trunc(parsed);
   }
+  // integer => drop decimals
+  return Math.trunc(parsed);
 }
 
-/** Format for display in the text box */
 function formatDisplay(numVal, isFloat) {
   if (isFloat) {
-    // If integer, add .0
     if (Number.isInteger(numVal)) {
-      return numVal.toFixed(1); // e.g. 3 => "3.0"
+      return numVal.toFixed(1); // e.g. "3.0"
     }
-    return String(numVal);
-  } else {
-    // integer
-    return String(Math.trunc(numVal));
+    return String(numVal); // e.g. "3.14"
   }
+  return String(Math.trunc(numVal));
 }
 
 /**************************************************************
  * GET/SET NESTED
  **************************************************************/
-function getNestedValue(obj, path) {
-  const parts = path.split(".");
-  let cur = obj;
-  for (let p of parts) {
-    if (!cur || typeof cur !== "object") return undefined;
-    cur = cur[p];
-  }
-  return cur;
-}
 function setNestedValue(obj, path, val) {
   const parts = path.split(".");
   const last = parts.pop();
   let cur = obj;
   for (let p of parts) {
-    if (typeof cur[p] !== "object") {
-      cur[p] = {};
-    }
+    if (typeof cur[p] !== "object") cur[p] = {};
     cur = cur[p];
   }
   cur[last] = val;
@@ -568,25 +504,29 @@ function setNestedValue(obj, path, val) {
  * RESET ALL
  **************************************************************/
 async function resetAllToDefault() {
-  for (const [fileHandle, dataObj] of editableFilesMap.entries()) {
-    // revert entire json
-    dataObj.jsonData = JSON.parse(JSON.stringify(dataObj.originalJson));
-    // also revert numericFields
-    dataObj.numericFields.forEach((field) => {
-      const origVal = getNestedValue(dataObj.originalJson, field.path);
-      field.value = origVal;
-    });
-    // write
-    await writeJson(fileHandle, dataObj.jsonData);
-  }
-  // Refresh if current file is open
-  if (currentFileHandle) {
-    const stored = editableFilesMap.get(currentFileHandle);
-    if (stored) {
-      showEditorForFile(currentFileHandle, currentFileHandle.name, "");
+  for (const [fileHandle, fileData] of editableFilesMap.entries()) {
+    // revert text entirely
+    const fileClone = await fileHandle.getFile();
+    const rawText = await fileClone.text(); 
+    fileData.rawText = rawText; // original
+    // re-parse
+    let parsed = {};
+    try { parsed = JSON.parse(rawText); } catch(e){}
+    fileData.jsonData = parsed;
+    fileData.fields = [];
+    gatherNumericFields(parsed, "", rawText, fileData.fields);
+    // each field => revert currentVal
+    for (let f of fileData.fields) {
+      f.currentVal = f.originalVal;
     }
+    // write raw text
+    await writeFileRaw(fileHandle, rawText);
   }
-  alert("All editable files have been reset to default.");
+  // Refresh UI for the current file
+  if (currentFileHandle) {
+    showEditorForFile(currentFileHandle, currentFileHandle.name, removeExtension(currentFileHandle.name));
+  }
+  alert("All files reverted to default (on disk).");
 }
 
 /**************************************************************
@@ -600,36 +540,30 @@ function filterStructure(structure, searchTerm) {
 
   for (const folderName in structure.subFolders) {
     const child = filterStructure(structure.subFolders[folderName], searchTerm);
-    if (child) {
-      subFolders[folderName] = child;
-    }
+    if (child) subFolders[folderName] = child;
   }
   for (const fileName in structure.files) {
-    const displayName = removeExtension(fileName).toLowerCase();
-    if (displayName.includes(searchTerm)) {
+    const disp = removeExtension(fileName).toLowerCase();
+    if (disp.includes(searchTerm)) {
       files[fileName] = structure.files[fileName];
     }
   }
   const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
-  if (!hasContent && searchTerm) {
-    return null;
-  }
-  return { subFolders, files, handle: structure.handle };
+  return hasContent ? { subFolders, files, handle: structure.handle } : null;
 }
 
 function onSearchChange(searchTerm) {
-  const container = document.getElementById("folderTree");
-  container.innerHTML = "";
+  const treeEl = document.getElementById("folderTree");
+  treeEl.innerHTML = "";
   if (!originalStructure) return;
   if (!searchTerm.trim()) {
-    // show full
-    renderFolderTree(originalStructure, container);
+    renderFolderTree(originalStructure, treeEl);
   } else {
-    const filtered = filterStructure(originalStructure, searchTerm);
+    const filtered = filterStructure(originalStructure, searchTerm.trim());
     if (!filtered) {
-      container.innerHTML = "<p>No results found.</p>";
+      treeEl.innerHTML = "<p>No results found.</p>";
     } else {
-      renderFolderTree(filtered, container);
+      renderFolderTree(filtered, treeEl);
     }
   }
 }
@@ -640,7 +574,9 @@ function onSearchChange(searchTerm) {
 document.addEventListener("DOMContentLoaded", () => {
   const selectFolderBtn = document.getElementById("selectFolderBtn");
   const statusMsg = document.getElementById("statusMsg");
-  const folderTreeContainer = document.getElementById("folderTree");
+  const folderTree = document.getElementById("folderTree");
+  const editorTitle = document.getElementById("editorTitle");
+  const editorContent = document.getElementById("editorContent");
   const resetAllBtn = document.getElementById("resetAllBtn");
   const searchInput = document.getElementById("searchInput");
 
@@ -650,21 +586,22 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!rootDirectoryHandle) return;
 
       statusMsg.textContent = "Folder: " + rootDirectoryHandle.name;
-      folderTreeContainer.innerHTML = "";
-      document.getElementById("editorTitle").textContent = "No file selected";
-      document.getElementById("editorContent").innerHTML = "";
+      folderTree.innerHTML = "";
+      editorTitle.textContent = "No file selected";
+      editorContent.innerHTML = "";
       editableFilesMap.clear();
       currentFileHandle = null;
 
-      const structure = await buildFolderStructure(rootDirectoryHandle);
-      if (!structure) {
-        folderTreeContainer.innerHTML = "<p>No .weapon/.upgrades files found.</p>";
+      const struct = await buildFolderStructure(rootDirectoryHandle);
+      if (!struct) {
+        folderTree.innerHTML = "<p>No .weapon/.upgrades files found.</p>";
         resetAllBtn.classList.add("hidden");
         return;
       }
-      originalStructure = structure;
-      folderStructure = structure;
-      renderFolderTree(folderStructure, folderTreeContainer);
+      folderStructure = struct;
+      originalStructure = struct;
+
+      renderFolderTree(folderStructure, folderTree);
       resetAllBtn.classList.remove("hidden");
     } catch (err) {
       console.error("Folder selection error:", err);
@@ -673,8 +610,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   resetAllBtn.addEventListener("click", async () => {
-    const sure = confirm("Reset ALL editable files to default values on disk?");
-    if (sure) {
+    if (confirm("Reset ALL files to default on disk? This discards your edits.")) {
       await resetAllToDefault();
     }
   });
