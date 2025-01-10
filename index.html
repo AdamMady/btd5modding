@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BTD5 LIVE Editor</title>
+  <style>
+    /* Minimal reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header bar */
+    #topBar {
+      display: flex;
+      align-items: center;
+      background: #333;
+      color: #fff;
+      padding: 0.5em;
+    }
+    #selectFolderBtn {
+      background: #4caf50;
+      border: none;
+      color: #fff;
+      padding: 0.6em 1.2em;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 4px;
+      margin-right: 1em;
+    }
+    #selectFolderBtn:hover {
+      background: #45a049;
+    }
+    #statusMsg {
+      font-size: 0.9em;
+      color: #ccc;
+    }
+    #resetAllBtn {
+      margin-left: auto;
+      background: #ff5c5c;
+      border: none;
+      color: #fff;
+      padding: 0.6em 1.2em;
+      font-size: 1em;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    #resetAllBtn:hover {
+      background: #e54848;
+    }
+
+    /* Main container: left (folder tree) + right (editor) */
+    #container {
+      flex: 1;
+      display: flex;
+      height: calc(100vh - 50px);
+    }
+
+    /* Left panel: folder tree */
+    #folderListPanel {
+      background: #fff;
+      border-right: 1px solid #ccc;
+      padding: 0.75em;
+      /* Make resizable horizontally */
+      resize: horizontal;
+      overflow: auto;
+      width: 300px;  /* initial width */
+      min-width: 150px;
+      max-width: 800px;
+    }
+
+    /* Right panel: editor */
+    #editorPanel {
+      flex: 1;
+      padding: 0.75em;
+      overflow-y: auto;
+    }
+
+    /* Folder / file listings */
+    .folderItem, .fileItem {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      margin: 0.2em 0;
+      padding: 0.2em 0;
+    }
+    .folderItem:hover, .fileItem:hover {
+      background: #eee;
+    }
+    .folderIcon, .fileIcon {
+      margin-right: 0.4em;
+    }
+    .folderItem b {
+      font-weight: bold;
+    }
+
+    /* Editor styling */
+    h2 {
+      margin-bottom: 0.5em;
+      font-size: 1.2em;
+    }
+    .editorTable {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5em;
+      background: #fff;
+    }
+    .editorTable thead th {
+      background: #f0f0f0;
+      text-align: left;
+      padding: 0.4em;
+      border-bottom: 1px solid #ccc;
+      font-weight: normal;
+    }
+    .editorTable tbody td {
+      border-bottom: 1px solid #eee;
+      padding: 0.4em;
+      vertical-align: middle;
+    }
+    .editorTable input[type="text"] {
+      width: 80%;
+      padding: 0.2em;
+    }
+    .revertBtn {
+      margin-left: 0.5em;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-size: 1.1em;
+      color: #666;
+    }
+    .revertBtn:hover {
+      color: #111;
+    }
+
+    /* Scrolling fix on smaller screens */
+    @media (max-width: 768px) {
+      #container {
+        flex-direction: column;
+      }
+      #folderListPanel {
+        width: 100%;
+        height: 250px;
+        resize: none; /* On mobile, this may be awkward to resize */
+      }
+      #editorPanel {
+        height: calc(100vh - 300px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Top bar -->
+  <div id="topBar">
+    <button id="selectFolderBtn">Select Folder</button>
+    <span id="statusMsg">No folder selected</span>
+    <button id="resetAllBtn" class="hidden">Reset All to Default</button>
+  </div>
+
+  <!-- Main container -->
+  <div id="container">
+    <!-- Left side: folder list -->
+    <div id="folderListPanel">
+      <h2>Folder View</h2>
+      <div id="folderTree"></div>
+    </div>
+
+    <!-- Right side: editor -->
+    <div id="editorPanel">
+      <h2 id="editorTitle">No file selected</h2>
+      <div id="editorContent"></div>
+    </div>
+  </div>
+
+<script>
+  /**************************************************************
+   * We'll rely on the File System Access API
+   * (available in Chromium-based browsers over HTTPS or localhost).
+   **************************************************************/
+
+  let rootDirectoryHandle = null;
+
+  // We'll store a pruned folder structure that only includes folders
+  // containing .weapon/.upgrades or their subfolders do.
+  // Each node: { handle, subFolders: { }, files: { [fileName]: FileHandle }, displayName }
+  let folderStructure = {};
+
+  // For each editable file, we track:
+  // { fileHandle -> { jsonData, originalJson, pathDisplay } }
+  let editableFilesMap = new Map();
+
+  // Currently displayed file
+  let currentFileHandle = null;
+
+  /* =============== UTILS =============== */
+  function isEditableFile(fileName) {
+    const lower = fileName.toLowerCase();
+    return lower.endsWith(".weapon") || lower.endsWith(".upgrades");
+  }
+  function removeExtension(fileName) {
+    // Remove .weapon or .upgrades for display
+    return fileName.replace(/(\.weapon|\.upgrades)$/i, "");
+  }
+
+  // File read/write
+  async function readJson(fileHandle) {
+    const fileData = await fileHandle.getFile();
+    const text = await fileData.text();
+    let parsed = {};
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      console.error("JSON parse error on:", fileHandle.name, err);
+    }
+    return parsed;
+  }
+  async function writeJson(fileHandle, jsonObj) {
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(jsonObj, null, 2));
+      await writable.close();
+    } catch (err) {
+      console.error("Error writing file:", fileHandle.name, err);
+    }
+  }
+
+  // Build a structure of directories & files, but only keep those with .weapon/.upgrades
+  // or subfolders that do.
+  async function buildFolderStructure(dirHandle, pathArr = []) {
+    const subFolders = {};
+    const files = {};
+
+    // step 1: scan all entries
+    for await (const [name, handle] of dirHandle.entries()) {
+      if (handle.kind === "directory") {
+        const child = await buildFolderStructure(handle, [...pathArr, name]);
+        if (child) {
+          // Only keep it if it has something
+          subFolders[name] = {
+            handle,
+            subFolders: child.subFolders,
+            files: child.files
+          };
+        }
+      } else {
+        // file
+        if (isEditableFile(name)) {
+          files[name] = handle;
+        }
+      }
+    }
+
+    // if no subFolders & no files => return null
+    const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
+    if (!hasContent) return null;
+
+    return { handle: dirHandle, subFolders, files };
+  }
+
+  // Render folder structure (folder in bold, file normal)
+  function renderFolderTree(structure, container, level = 0) {
+    if (!structure) return;
+    // subFolders
+    for (const folderName in structure.subFolders) {
+      const folderNode = structure.subFolders[folderName];
+      // Folder item
+      const folderDiv = document.createElement("div");
+      folderDiv.className = "folderItem";
+      folderDiv.style.marginLeft = (level * 1.2) + "em";
+
+      const folderIcon = document.createElement("span");
+      folderIcon.className = "folderIcon";
+      folderIcon.textContent = "📁";
+      folderDiv.appendChild(folderIcon);
+
+      // Bold folder name
+      const folderLabel = document.createElement("b");
+      folderLabel.textContent = folderName;
+      folderDiv.appendChild(folderLabel);
+
+      container.appendChild(folderDiv);
+
+      // Recursively render sub-items
+      renderFolderTree(folderNode, container, level + 1);
+    }
+
+    // files
+    for (const fileName in structure.files) {
+      const fileHandle = structure.files[fileName];
+      const baseName = removeExtension(fileName);
+
+      const fileDiv = document.createElement("div");
+      fileDiv.className = "fileItem";
+      fileDiv.style.marginLeft = (level * 1.2 + 1) + "em";
+
+      const fileIcon = document.createElement("span");
+      fileIcon.className = "fileIcon";
+      fileIcon.textContent = "⚙️";
+      fileDiv.appendChild(fileIcon);
+
+      const fileLabel = document.createElement("span");
+      fileLabel.textContent = baseName;
+      fileDiv.appendChild(fileLabel);
+
+      fileDiv.onclick = async () => {
+        await showEditorForFile(fileHandle, fileName, baseName);
+      };
+
+      container.appendChild(fileDiv);
+    }
+  }
+
+  // Show the numeric editor for one .weapon / .upgrades file
+  async function showEditorForFile(fileHandle, realFileName, displayName) {
+    currentFileHandle = fileHandle;
+
+    const titleEl = document.getElementById("editorTitle");
+    titleEl.textContent = displayName;
+
+    const container = document.getElementById("editorContent");
+    container.innerHTML = "";
+
+    // Check if we already have it loaded in memory
+    let stored = editableFilesMap.get(fileHandle);
+    if (!stored) {
+      // read & store
+      const jsonData = await readJson(fileHandle);
+      const originalJson = JSON.parse(JSON.stringify(jsonData));
+      stored = {
+        pathDisplay: displayName,
+        jsonData,
+        originalJson
+      };
+      editableFilesMap.set(fileHandle, stored);
+    }
+
+    const { jsonData, originalJson } = stored;
+
+    // Build a table of numeric fields
+    const rows = [];
+    buildEditorRows(jsonData, originalJson, "", rows);
+
+    if (rows.length === 0) {
+      container.innerHTML = "<p>No numeric fields found in this file.</p>";
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "editorTable";
+
+    const thead = document.createElement("thead");
+    const trHead = document.createElement("tr");
+    const thPath = document.createElement("th");
+    thPath.textContent = "Path";
+    const thVal = document.createElement("th");
+    thVal.textContent = "Value";
+    trHead.appendChild(thPath);
+    trHead.appendChild(thVal);
+    thead.appendChild(trHead);
+
+    const tbody = document.createElement("tbody");
+    rows.forEach(row => {
+      const tr = document.createElement("tr");
+
+      const tdPath = document.createElement("td");
+      tdPath.textContent = row.path;
+      tr.appendChild(tdPath);
+
+      const tdVal = document.createElement("td");
+      // Input for numeric
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = row.currentVal;
+      input.onchange = async () => {
+        const newVal = formatNumericValue(row.currentVal, input.value);
+        row.currentVal = newVal;
+        setNestedValue(jsonData, row.path, newVal);
+        input.value = newVal; // reflect possible fix
+        await writeJson(fileHandle, jsonData);
+      };
+      tdVal.appendChild(input);
+
+      // Revert button
+      const revertBtn = document.createElement("button");
+      revertBtn.className = "revertBtn";
+      revertBtn.textContent = "🔄";
+      revertBtn.title = "Revert to default";
+      revertBtn.onclick = async () => {
+        // Revert to original
+        const origVal = row.originalVal;
+        row.currentVal = origVal;
+        setNestedValue(jsonData, row.path, origVal);
+        input.value = origVal;
+        await writeJson(fileHandle, jsonData);
+      };
+      tdVal.appendChild(revertBtn);
+
+      tr.appendChild(tdVal);
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(thead);
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  // Recursively gather numeric fields
+  function buildEditorRows(jsonObj, origObj, parentPath, rows) {
+    for (let key in jsonObj) {
+      if (!jsonObj.hasOwnProperty(key)) continue;
+      const val = jsonObj[key];
+      const fullPath = parentPath ? parentPath + "." + key : key;
+      if (typeof val === "object" && val !== null) {
+        buildEditorRows(val, origObj, fullPath, rows);
+      } else if (typeof val === "number") {
+        const origVal = getNestedValue(origObj, fullPath);
+        rows.push({
+          path: fullPath,
+          currentVal: val,
+          originalVal: origVal
+        });
+      }
+    }
+  }
+  function getNestedValue(obj, path) {
+    const parts = path.split(".");
+    let cur = obj;
+    for (let p of parts) {
+      if (!cur || typeof cur !== "object") return undefined;
+      cur = cur[p];
+    }
+    return cur;
+  }
+  function setNestedValue(obj, path, newVal) {
+    const parts = path.split(".");
+    const last = parts.pop();
+    let cur = obj;
+    for (let p of parts) {
+      if (typeof cur[p] !== "object") {
+        cur[p] = {};
+      }
+      cur = cur[p];
+    }
+    cur[last] = newVal;
+  }
+
+  // The user’s float/integer formatting rule
+  function formatNumericValue(originalVal, newString) {
+    const parsed = parseFloat(newString);
+    if (isNaN(parsed)) {
+      return originalVal; // revert
+    }
+    const originalIsFloat = (typeof originalVal === "number" && !Number.isInteger(originalVal));
+    if (originalIsFloat) {
+      if (Number.isInteger(parsed)) {
+        // If user typed integer but original was float, force .0
+        return parseFloat(parsed.toFixed(1));
+      }
+      return parsed; // keep float
+    } else {
+      // original was integer
+      if (Number.isInteger(parsed)) {
+        return parseInt(parsed);
+      } else {
+        return parseInt(parsed); // clamp to int
+      }
+    }
+  }
+
+  // Reset ALL files to their default values
+  async function resetAllToDefault() {
+    for (const [fileHandle, dataObj] of editableFilesMap.entries()) {
+      // revert entire jsonData
+      dataObj.jsonData = JSON.parse(JSON.stringify(dataObj.originalJson));
+      // write to disk
+      await writeJson(fileHandle, dataObj.jsonData);
+    }
+    // If the current file is open, refresh it
+    if (currentFileHandle) {
+      const stored = editableFilesMap.get(currentFileHandle);
+      if (stored) {
+        showEditorForFile(currentFileHandle, currentFileHandle.name, stored.pathDisplay);
+      }
+    }
+  }
+
+  /**************************************************************
+   * MAIN
+   **************************************************************/
+  document.addEventListener("DOMContentLoaded", () => {
+    const selectFolderBtn = document.getElementById("selectFolderBtn");
+    const statusMsg = document.getElementById("statusMsg");
+    const folderTreeContainer = document.getElementById("folderTree");
+    const resetAllBtn = document.getElementById("resetAllBtn");
+
+    selectFolderBtn.addEventListener("click", async () => {
+      try {
+        rootDirectoryHandle = await window.showDirectoryPicker();
+        if (!rootDirectoryHandle) return;
+
+        statusMsg.textContent = "Folder selected: " + rootDirectoryHandle.name;
+        folderTreeContainer.innerHTML = "";
+        document.getElementById("editorTitle").textContent = "No file selected";
+        document.getElementById("editorContent").innerHTML = "";
+        editableFilesMap.clear();
+        currentFileHandle = null;
+
+        // Build pruned structure (only keeps directories with .weapon/.upgrades inside or in subfolders)
+        const structure = await buildFolderStructure(rootDirectoryHandle);
+        if (!structure) {
+          folderTreeContainer.innerHTML = "<p>No editable files found in that folder.</p>";
+          resetAllBtn.classList.add("hidden");
+          return;
+        }
+        folderStructure = structure;
+        // Render
+        renderFolderTree(folderStructure, folderTreeContainer);
+        resetAllBtn.classList.remove("hidden");
+
+      } catch (err) {
+        console.error("Folder selection error:", err);
+        statusMsg.textContent = "Failed to access folder.";
+      }
+    });
+
+    resetAllBtn.addEventListener("click", async () => {
+      // Confirm?
+      const sure = confirm("Reset ALL editable files to their default values? This overwrites changes on disk.");
+      if (sure) {
+        await resetAllToDefault();
+        alert("All files reverted to default.");
+      }
+    });
+  });
+</script>
+</body>
+</html>
