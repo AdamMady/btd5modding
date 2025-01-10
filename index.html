@@ -1,16 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>BTD5 LIVE Editor</title>
   <style>
     /* Minimal reset */
     * {
-      margin: 0;
+      margin: 0; 
       padding: 0;
       box-sizing: border-box;
     }
-
     body {
       font-family: "Segoe UI", Roboto, Arial, sans-serif;
       background: #f5f5f5;
@@ -44,9 +43,10 @@
     #statusMsg {
       font-size: 0.9em;
       color: #ccc;
+      margin-right: auto; /* push the resetAllBtn to the right */
+      margin-left: 0.5em;
     }
     #resetAllBtn {
-      margin-left: auto;
       background: #ff5c5c;
       border: none;
       color: #fff;
@@ -54,6 +54,7 @@
       font-size: 1em;
       cursor: pointer;
       border-radius: 4px;
+      margin-left: 1em;
     }
     #resetAllBtn:hover {
       background: #e54848;
@@ -66,17 +67,25 @@
       height: calc(100vh - 50px);
     }
 
-    /* Left panel: folder tree */
+    /* Left panel: folder tree & search bar */
     #folderListPanel {
       background: #fff;
       border-right: 1px solid #ccc;
       padding: 0.75em;
-      /* Make resizable horizontally */
       resize: horizontal;
       overflow: auto;
-      width: 300px;  /* initial width */
+      width: 300px; 
       min-width: 150px;
       max-width: 800px;
+      display: flex;
+      flex-direction: column;
+    }
+    #searchInput {
+      margin-bottom: 0.5em;
+      padding: 0.4em;
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 4px;
     }
 
     /* Right panel: editor */
@@ -87,6 +96,10 @@
     }
 
     /* Folder / file listings */
+    #folderTree {
+      flex: 1;
+      overflow-y: auto;
+    }
     .folderItem, .fileItem {
       display: flex;
       align-items: center;
@@ -151,7 +164,7 @@
       #folderListPanel {
         width: 100%;
         height: 250px;
-        resize: none; /* On mobile, this may be awkward to resize */
+        resize: none; /* On mobile, can't easily drag */
       }
       #editorPanel {
         height: calc(100vh - 300px);
@@ -169,8 +182,9 @@
 
   <!-- Main container -->
   <div id="container">
-    <!-- Left side: folder list -->
+    <!-- Left side: folder list + search -->
     <div id="folderListPanel">
+      <input type="text" id="searchInput" placeholder="Search files..." />
       <h2>Folder View</h2>
       <div id="folderTree"></div>
     </div>
@@ -183,365 +197,492 @@
   </div>
 
 <script>
-  /**************************************************************
-   * We'll rely on the File System Access API
-   * (available in Chromium-based browsers over HTTPS or localhost).
-   **************************************************************/
+/**************************************************************
+ * We'll rely on the File System Access API in Chromium-based
+ * browsers on HTTPS/localhost.
+ **************************************************************/
+let rootDirectoryHandle = null;
+let folderStructure = null; // pruned structure with only .weapon/.upgrades
+let originalStructure = null; // unfiltered copy for search
 
-  let rootDirectoryHandle = null;
+// Keep track of each file's data: { fileHandle -> { jsonData, originalJson, numericFields[] } }
+let editableFilesMap = new Map();
+// Currently displayed file
+let currentFileHandle = null;
 
-  // We'll store a pruned folder structure that only includes folders
-  // containing .weapon/.upgrades or their subfolders do.
-  // Each node: { handle, subFolders: { }, files: { [fileName]: FileHandle }, displayName }
-  let folderStructure = {};
+/**************************************************************
+ * DETECT .weapon/.upgrades
+ **************************************************************/
+function isEditableFile(name) {
+  const lower = name.toLowerCase();
+  return lower.endsWith(".weapon") || lower.endsWith(".upgrades");
+}
+function removeExtension(fileName) {
+  // remove .weapon or .upgrades
+  return fileName.replace(/(\.weapon|\.upgrades)$/i, "");
+}
 
-  // For each editable file, we track:
-  // { fileHandle -> { jsonData, originalJson, pathDisplay } }
-  let editableFilesMap = new Map();
+/**************************************************************
+ * Build a pruned folder structure
+ **************************************************************/
+async function buildFolderStructure(dirHandle) {
+  const subFolders = {};
+  const files = {};
 
-  // Currently displayed file
-  let currentFileHandle = null;
-
-  /* =============== UTILS =============== */
-  function isEditableFile(fileName) {
-    const lower = fileName.toLowerCase();
-    return lower.endsWith(".weapon") || lower.endsWith(".upgrades");
+  for await (const [name, handle] of dirHandle.entries()) {
+    if (handle.kind === "directory") {
+      const child = await buildFolderStructure(handle);
+      if (child) {
+        subFolders[name] = child;
+        subFolders[name].handle = handle;
+      }
+    } else {
+      if (isEditableFile(name)) {
+        files[name] = handle;
+      }
+    }
   }
-  function removeExtension(fileName) {
-    // Remove .weapon or .upgrades for display
-    return fileName.replace(/(\.weapon|\.upgrades)$/i, "");
+
+  const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
+  if (!hasContent) return null;
+  return { subFolders, files, handle: dirHandle };
+}
+
+/**************************************************************
+ * RENDER FOLDER TREE
+ **************************************************************/
+function renderFolderTree(structure, container, level=0) {
+  if (!structure) return;
+
+  // subFolders
+  for (const folderName in structure.subFolders) {
+    const folderNode = structure.subFolders[folderName];
+
+    const folderDiv = document.createElement("div");
+    folderDiv.className = "folderItem";
+    folderDiv.style.marginLeft = (level * 1.2) + "em";
+
+    const folderIcon = document.createElement("span");
+    folderIcon.className = "folderIcon";
+    folderIcon.textContent = "📁";
+    folderDiv.appendChild(folderIcon);
+
+    const folderLabel = document.createElement("b");
+    folderLabel.textContent = folderName;
+    folderDiv.appendChild(folderLabel);
+
+    container.appendChild(folderDiv);
+    renderFolderTree(folderNode, container, level + 1);
   }
 
-  // File read/write
-  async function readJson(fileHandle) {
-    const fileData = await fileHandle.getFile();
-    const text = await fileData.text();
-    let parsed = {};
-    try {
-      parsed = JSON.parse(text);
-    } catch (err) {
-      console.error("JSON parse error on:", fileHandle.name, err);
+  // files
+  for (const fileName in structure.files) {
+    const fileHandle = structure.files[fileName];
+    const displayName = removeExtension(fileName);
+
+    const fileDiv = document.createElement("div");
+    fileDiv.className = "fileItem";
+    fileDiv.style.marginLeft = (level * 1.2 + 1) + "em";
+
+    const fileIcon = document.createElement("span");
+    fileIcon.className = "fileIcon";
+    fileIcon.textContent = "⚙️";
+    fileDiv.appendChild(fileIcon);
+
+    const fileLabel = document.createElement("span");
+    fileLabel.textContent = displayName;
+    fileDiv.appendChild(fileLabel);
+
+    fileDiv.onclick = async () => {
+      showEditorForFile(fileHandle, fileName, displayName);
+    };
+
+    container.appendChild(fileDiv);
+  }
+}
+
+/**************************************************************
+ * LOAD & SAVE JSON
+ * 
+ * To detect float vs integer, we do a raw-text pass for each numeric field
+ * *before* we parse. If we see a decimal point in the raw text, we mark it float.
+ **************************************************************/
+async function readJson(fileHandle) {
+  const fileData = await fileHandle.getFile();
+  const text = await fileData.text();
+  let parsed = {};
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    console.error("JSON parse error:", fileHandle.name, err);
+  }
+  return { rawText: text, parsed };
+}
+
+async function writeJson(fileHandle, jsonObj) {
+  try {
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(jsonObj, null, 2));
+    await writable.close();
+  } catch (err) {
+    console.error("Error writing file:", fileHandle.name, err);
+  }
+}
+
+/**************************************************************
+ * DETECT NUMERIC FIELDS
+ **************************************************************/
+function collectNumericFields(jsonObj, parentPath="", rawText) {
+  // We'll return an array of { path, value, originalIsFloat }
+  // We'll detect originalIsFloat by scanning rawText if possible.
+  const result = [];
+  for (let key in jsonObj) {
+    if (!jsonObj.hasOwnProperty(key)) continue;
+    const val = jsonObj[key];
+    const fullPath = parentPath ? parentPath + "." + key : key;
+
+    if (val && typeof val === "object") {
+      result.push(...collectNumericFields(val, fullPath, rawText));
+    } else if (typeof val === "number") {
+      // detect float by searching rawText for the substring
+      const maybeFloat = checkIfOriginallyFloat(fullPath, val, rawText);
+      result.push({
+        path: fullPath,
+        value: val,
+        originalIsFloat: maybeFloat
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Heuristic to see if original JSON had a decimal:
+ * - We search for the pattern: "<key>" : [someNumber], ignoring spaces
+ * - If we find that someNumber has a '.', we consider it float
+ * - If the number is negative or includes exponent, handle that too if needed
+ */
+function checkIfOriginallyFloat(path, val, rawText) {
+  // We'll try a rough approach:
+  // 1) Extract the last part of path => the key
+  const lastDotIndex = path.lastIndexOf(".");
+  const keyName = lastDotIndex === -1 ? path : path.substring(lastDotIndex + 1);
+
+  // 2) Build a rough pattern: "keyName": maybe with quotes
+  //    We'll remove quotes from keyName if any
+  //    Then we try a regex that finds "keyName"\s*:\s*([\-\d\.eE]+)
+  //    and checks if that group has a decimal point.
+  const regexKey = keyName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"); // escape
+  const re = new RegExp(`["']${regexKey}["']\\s*:\\s*([\\-\\+]?\\d+(\\.\\d+)?([eE][\\-\\+]?\\d+)?)(\\s|,|}|])`);
+
+  // We'll remove newlines/spaces for easier matching, or we can just keep them
+  // but the pattern tries to handle spacing with \\s* anyway
+  // Let's just do a normal match:
+  const match = re.exec(rawText);
+  if (!match) {
+    // not found => fallback
+    // if val is integer => false
+    // else => true
+    return !Number.isInteger(val);
+  }
+  // match[1] is the numeric substring
+  const numericStr = match[1];
+  // If it has '.', we consider it float
+  if (numericStr.includes(".")) {
+    return true;
+  }
+  return false;
+}
+
+/**************************************************************
+ * SHOW EDITOR
+ **************************************************************/
+async function showEditorForFile(fileHandle, realFileName, displayName) {
+  currentFileHandle = fileHandle;
+
+  const titleEl = document.getElementById("editorTitle");
+  titleEl.textContent = displayName;
+
+  const container = document.getElementById("editorContent");
+  container.innerHTML = "<p>Loading...</p>";
+
+  // Check map
+  let stored = editableFilesMap.get(fileHandle);
+  if (!stored) {
+    // read from disk
+    const { rawText, parsed } = await readJson(fileHandle);
+    const originalJson = JSON.parse(JSON.stringify(parsed));
+    // Gather numeric fields with float detection
+    const numericFields = collectNumericFields(parsed, "", rawText);
+
+    stored = {
+      jsonData: parsed,
+      originalJson,
+      numericFields
+    };
+    editableFilesMap.set(fileHandle, stored);
+  }
+
+  // Now build a table for numeric fields
+  const { jsonData, originalJson, numericFields } = stored;
+  container.innerHTML = "";
+
+  if (numericFields.length === 0) {
+    container.innerHTML = "<p>No numeric fields found in this file.</p>";
+    return;
+  }
+
+  const table = document.createElement("table");
+  table.className = "editorTable";
+
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  const thPath = document.createElement("th");
+  thPath.textContent = "Path";
+  const thVal = document.createElement("th");
+  thVal.textContent = "Value";
+  trHead.appendChild(thPath);
+  trHead.appendChild(thVal);
+  thead.appendChild(trHead);
+
+  const tbody = document.createElement("tbody");
+  numericFields.forEach((field) => {
+    const tr = document.createElement("tr");
+
+    const tdPath = document.createElement("td");
+    tdPath.textContent = field.path;
+    tr.appendChild(tdPath);
+
+    const tdVal = document.createElement("td");
+
+    // We decide how to show the initial text:
+    // If originalIsFloat, but current value is integer => show e.g. "3.0"
+    const initialStr = formatDisplay(field.value, field.originalIsFloat);
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = initialStr;
+
+    input.onchange = async () => {
+      // parse user input
+      const newVal = parseUserNumber(field.value, input.value, field.originalIsFloat);
+      field.value = newVal;
+      setNestedValue(jsonData, field.path, newVal);
+
+      // Force the text box to reflect the “.0” if needed
+      const forcedStr = formatDisplay(newVal, field.originalIsFloat);
+      input.value = forcedStr;
+
+      // Write to disk
+      await writeJson(fileHandle, jsonData);
+    };
+
+    tdVal.appendChild(input);
+
+    // Revert button
+    const revertBtn = document.createElement("button");
+    revertBtn.className = "revertBtn";
+    revertBtn.textContent = "🔄";
+    revertBtn.title = "Revert to default";
+    revertBtn.onclick = async () => {
+      // revert field in memory
+      const origVal = getNestedValue(originalJson, field.path);
+      field.value = origVal;
+      setNestedValue(jsonData, field.path, origVal);
+
+      input.value = formatDisplay(origVal, field.originalIsFloat);
+
+      await writeJson(fileHandle, jsonData);
+    };
+    tdVal.appendChild(revertBtn);
+
+    tr.appendChild(tdVal);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(thead);
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+/**************************************************************
+ * INT/FLOAT FORMAT
+ * If originalIsFloat == true and user typed integer, show .0
+ **************************************************************/
+function parseUserNumber(oldVal, newStr, originalIsFloat) {
+  const parsed = Number(newStr);
+  if (isNaN(parsed)) {
+    return oldVal; // revert
+  }
+  if (originalIsFloat) {
+    // If user typed integer, e.g. 3 => 3.0
+    if (Number.isInteger(parsed)) {
+      return parseFloat(parsed.toFixed(1));
     }
     return parsed;
+  } else {
+    // It's originally an integer => no decimals
+    return Math.trunc(parsed);
   }
-  async function writeJson(fileHandle, jsonObj) {
-    try {
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(jsonObj, null, 2));
-      await writable.close();
-    } catch (err) {
-      console.error("Error writing file:", fileHandle.name, err);
+}
+
+/** Format for display in the text box */
+function formatDisplay(numVal, isFloat) {
+  if (isFloat) {
+    // If integer, add .0
+    if (Number.isInteger(numVal)) {
+      return numVal.toFixed(1); // e.g. 3 => "3.0"
     }
+    return String(numVal);
+  } else {
+    // integer
+    return String(Math.trunc(numVal));
   }
+}
 
-  // Build a structure of directories & files, but only keep those with .weapon/.upgrades
-  // or subfolders that do.
-  async function buildFolderStructure(dirHandle, pathArr = []) {
-    const subFolders = {};
-    const files = {};
-
-    // step 1: scan all entries
-    for await (const [name, handle] of dirHandle.entries()) {
-      if (handle.kind === "directory") {
-        const child = await buildFolderStructure(handle, [...pathArr, name]);
-        if (child) {
-          // Only keep it if it has something
-          subFolders[name] = {
-            handle,
-            subFolders: child.subFolders,
-            files: child.files
-          };
-        }
-      } else {
-        // file
-        if (isEditableFile(name)) {
-          files[name] = handle;
-        }
-      }
-    }
-
-    // if no subFolders & no files => return null
-    const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
-    if (!hasContent) return null;
-
-    return { handle: dirHandle, subFolders, files };
+/**************************************************************
+ * GET/SET NESTED
+ **************************************************************/
+function getNestedValue(obj, path) {
+  const parts = path.split(".");
+  let cur = obj;
+  for (let p of parts) {
+    if (!cur || typeof cur !== "object") return undefined;
+    cur = cur[p];
   }
-
-  // Render folder structure (folder in bold, file normal)
-  function renderFolderTree(structure, container, level = 0) {
-    if (!structure) return;
-    // subFolders
-    for (const folderName in structure.subFolders) {
-      const folderNode = structure.subFolders[folderName];
-      // Folder item
-      const folderDiv = document.createElement("div");
-      folderDiv.className = "folderItem";
-      folderDiv.style.marginLeft = (level * 1.2) + "em";
-
-      const folderIcon = document.createElement("span");
-      folderIcon.className = "folderIcon";
-      folderIcon.textContent = "📁";
-      folderDiv.appendChild(folderIcon);
-
-      // Bold folder name
-      const folderLabel = document.createElement("b");
-      folderLabel.textContent = folderName;
-      folderDiv.appendChild(folderLabel);
-
-      container.appendChild(folderDiv);
-
-      // Recursively render sub-items
-      renderFolderTree(folderNode, container, level + 1);
+  return cur;
+}
+function setNestedValue(obj, path, val) {
+  const parts = path.split(".");
+  const last = parts.pop();
+  let cur = obj;
+  for (let p of parts) {
+    if (typeof cur[p] !== "object") {
+      cur[p] = {};
     }
-
-    // files
-    for (const fileName in structure.files) {
-      const fileHandle = structure.files[fileName];
-      const baseName = removeExtension(fileName);
-
-      const fileDiv = document.createElement("div");
-      fileDiv.className = "fileItem";
-      fileDiv.style.marginLeft = (level * 1.2 + 1) + "em";
-
-      const fileIcon = document.createElement("span");
-      fileIcon.className = "fileIcon";
-      fileIcon.textContent = "⚙️";
-      fileDiv.appendChild(fileIcon);
-
-      const fileLabel = document.createElement("span");
-      fileLabel.textContent = baseName;
-      fileDiv.appendChild(fileLabel);
-
-      fileDiv.onclick = async () => {
-        await showEditorForFile(fileHandle, fileName, baseName);
-      };
-
-      container.appendChild(fileDiv);
-    }
+    cur = cur[p];
   }
+  cur[last] = val;
+}
 
-  // Show the numeric editor for one .weapon / .upgrades file
-  async function showEditorForFile(fileHandle, realFileName, displayName) {
-    currentFileHandle = fileHandle;
-
-    const titleEl = document.getElementById("editorTitle");
-    titleEl.textContent = displayName;
-
-    const container = document.getElementById("editorContent");
-    container.innerHTML = "";
-
-    // Check if we already have it loaded in memory
-    let stored = editableFilesMap.get(fileHandle);
-    if (!stored) {
-      // read & store
-      const jsonData = await readJson(fileHandle);
-      const originalJson = JSON.parse(JSON.stringify(jsonData));
-      stored = {
-        pathDisplay: displayName,
-        jsonData,
-        originalJson
-      };
-      editableFilesMap.set(fileHandle, stored);
-    }
-
-    const { jsonData, originalJson } = stored;
-
-    // Build a table of numeric fields
-    const rows = [];
-    buildEditorRows(jsonData, originalJson, "", rows);
-
-    if (rows.length === 0) {
-      container.innerHTML = "<p>No numeric fields found in this file.</p>";
-      return;
-    }
-
-    const table = document.createElement("table");
-    table.className = "editorTable";
-
-    const thead = document.createElement("thead");
-    const trHead = document.createElement("tr");
-    const thPath = document.createElement("th");
-    thPath.textContent = "Path";
-    const thVal = document.createElement("th");
-    thVal.textContent = "Value";
-    trHead.appendChild(thPath);
-    trHead.appendChild(thVal);
-    thead.appendChild(trHead);
-
-    const tbody = document.createElement("tbody");
-    rows.forEach(row => {
-      const tr = document.createElement("tr");
-
-      const tdPath = document.createElement("td");
-      tdPath.textContent = row.path;
-      tr.appendChild(tdPath);
-
-      const tdVal = document.createElement("td");
-      // Input for numeric
-      const input = document.createElement("input");
-      input.type = "text";
-      input.value = row.currentVal;
-      input.onchange = async () => {
-        const newVal = formatNumericValue(row.currentVal, input.value);
-        row.currentVal = newVal;
-        setNestedValue(jsonData, row.path, newVal);
-        input.value = newVal; // reflect possible fix
-        await writeJson(fileHandle, jsonData);
-      };
-      tdVal.appendChild(input);
-
-      // Revert button
-      const revertBtn = document.createElement("button");
-      revertBtn.className = "revertBtn";
-      revertBtn.textContent = "🔄";
-      revertBtn.title = "Revert to default";
-      revertBtn.onclick = async () => {
-        // Revert to original
-        const origVal = row.originalVal;
-        row.currentVal = origVal;
-        setNestedValue(jsonData, row.path, origVal);
-        input.value = origVal;
-        await writeJson(fileHandle, jsonData);
-      };
-      tdVal.appendChild(revertBtn);
-
-      tr.appendChild(tdVal);
-      tbody.appendChild(tr);
+/**************************************************************
+ * RESET ALL
+ **************************************************************/
+async function resetAllToDefault() {
+  for (const [fileHandle, dataObj] of editableFilesMap.entries()) {
+    // revert entire json
+    dataObj.jsonData = JSON.parse(JSON.stringify(dataObj.originalJson));
+    // also revert numericFields
+    dataObj.numericFields.forEach((field) => {
+      const origVal = getNestedValue(dataObj.originalJson, field.path);
+      field.value = origVal;
     });
+    // write
+    await writeJson(fileHandle, dataObj.jsonData);
+  }
+  // Refresh if current file is open
+  if (currentFileHandle) {
+    const stored = editableFilesMap.get(currentFileHandle);
+    if (stored) {
+      showEditorForFile(currentFileHandle, currentFileHandle.name, "");
+    }
+  }
+  alert("All editable files have been reset to default.");
+}
 
-    table.appendChild(thead);
-    table.appendChild(tbody);
-    container.appendChild(table);
-  }
+/**************************************************************
+ * SEARCH
+ **************************************************************/
+function filterStructure(structure, searchTerm) {
+  if (!structure) return null;
+  const subFolders = {};
+  const files = {};
+  searchTerm = searchTerm.toLowerCase();
 
-  // Recursively gather numeric fields
-  function buildEditorRows(jsonObj, origObj, parentPath, rows) {
-    for (let key in jsonObj) {
-      if (!jsonObj.hasOwnProperty(key)) continue;
-      const val = jsonObj[key];
-      const fullPath = parentPath ? parentPath + "." + key : key;
-      if (typeof val === "object" && val !== null) {
-        buildEditorRows(val, origObj, fullPath, rows);
-      } else if (typeof val === "number") {
-        const origVal = getNestedValue(origObj, fullPath);
-        rows.push({
-          path: fullPath,
-          currentVal: val,
-          originalVal: origVal
-        });
-      }
+  for (const folderName in structure.subFolders) {
+    const child = filterStructure(structure.subFolders[folderName], searchTerm);
+    if (child) {
+      subFolders[folderName] = child;
     }
   }
-  function getNestedValue(obj, path) {
-    const parts = path.split(".");
-    let cur = obj;
-    for (let p of parts) {
-      if (!cur || typeof cur !== "object") return undefined;
-      cur = cur[p];
+  for (const fileName in structure.files) {
+    const displayName = removeExtension(fileName).toLowerCase();
+    if (displayName.includes(searchTerm)) {
+      files[fileName] = structure.files[fileName];
     }
-    return cur;
   }
-  function setNestedValue(obj, path, newVal) {
-    const parts = path.split(".");
-    const last = parts.pop();
-    let cur = obj;
-    for (let p of parts) {
-      if (typeof cur[p] !== "object") {
-        cur[p] = {};
-      }
-      cur = cur[p];
-    }
-    cur[last] = newVal;
+  const hasContent = (Object.keys(subFolders).length > 0) || (Object.keys(files).length > 0);
+  if (!hasContent && searchTerm) {
+    return null;
   }
+  return { subFolders, files, handle: structure.handle };
+}
 
-  // The user’s float/integer formatting rule
-  function formatNumericValue(originalVal, newString) {
-    const parsed = parseFloat(newString);
-    if (isNaN(parsed)) {
-      return originalVal; // revert
-    }
-    const originalIsFloat = (typeof originalVal === "number" && !Number.isInteger(originalVal));
-    if (originalIsFloat) {
-      if (Number.isInteger(parsed)) {
-        // If user typed integer but original was float, force .0
-        return parseFloat(parsed.toFixed(1));
-      }
-      return parsed; // keep float
+function onSearchChange(searchTerm) {
+  const container = document.getElementById("folderTree");
+  container.innerHTML = "";
+  if (!originalStructure) return;
+  if (!searchTerm.trim()) {
+    // show full
+    renderFolderTree(originalStructure, container);
+  } else {
+    const filtered = filterStructure(originalStructure, searchTerm);
+    if (!filtered) {
+      container.innerHTML = "<p>No results found.</p>";
     } else {
-      // original was integer
-      if (Number.isInteger(parsed)) {
-        return parseInt(parsed);
-      } else {
-        return parseInt(parsed); // clamp to int
-      }
+      renderFolderTree(filtered, container);
     }
   }
+}
 
-  // Reset ALL files to their default values
-  async function resetAllToDefault() {
-    for (const [fileHandle, dataObj] of editableFilesMap.entries()) {
-      // revert entire jsonData
-      dataObj.jsonData = JSON.parse(JSON.stringify(dataObj.originalJson));
-      // write to disk
-      await writeJson(fileHandle, dataObj.jsonData);
+/**************************************************************
+ * MAIN
+ **************************************************************/
+document.addEventListener("DOMContentLoaded", () => {
+  const selectFolderBtn = document.getElementById("selectFolderBtn");
+  const statusMsg = document.getElementById("statusMsg");
+  const folderTreeContainer = document.getElementById("folderTree");
+  const resetAllBtn = document.getElementById("resetAllBtn");
+  const searchInput = document.getElementById("searchInput");
+
+  selectFolderBtn.addEventListener("click", async () => {
+    try {
+      rootDirectoryHandle = await window.showDirectoryPicker();
+      if (!rootDirectoryHandle) return;
+
+      statusMsg.textContent = "Folder: " + rootDirectoryHandle.name;
+      folderTreeContainer.innerHTML = "";
+      document.getElementById("editorTitle").textContent = "No file selected";
+      document.getElementById("editorContent").innerHTML = "";
+      editableFilesMap.clear();
+      currentFileHandle = null;
+
+      const structure = await buildFolderStructure(rootDirectoryHandle);
+      if (!structure) {
+        folderTreeContainer.innerHTML = "<p>No .weapon/.upgrades files found.</p>";
+        resetAllBtn.classList.add("hidden");
+        return;
+      }
+      originalStructure = structure;
+      folderStructure = structure;
+      renderFolderTree(folderStructure, folderTreeContainer);
+      resetAllBtn.classList.remove("hidden");
+    } catch (err) {
+      console.error("Folder selection error:", err);
+      statusMsg.textContent = "Failed to access folder.";
     }
-    // If the current file is open, refresh it
-    if (currentFileHandle) {
-      const stored = editableFilesMap.get(currentFileHandle);
-      if (stored) {
-        showEditorForFile(currentFileHandle, currentFileHandle.name, stored.pathDisplay);
-      }
-    }
-  }
-
-  /**************************************************************
-   * MAIN
-   **************************************************************/
-  document.addEventListener("DOMContentLoaded", () => {
-    const selectFolderBtn = document.getElementById("selectFolderBtn");
-    const statusMsg = document.getElementById("statusMsg");
-    const folderTreeContainer = document.getElementById("folderTree");
-    const resetAllBtn = document.getElementById("resetAllBtn");
-
-    selectFolderBtn.addEventListener("click", async () => {
-      try {
-        rootDirectoryHandle = await window.showDirectoryPicker();
-        if (!rootDirectoryHandle) return;
-
-        statusMsg.textContent = "Folder selected: " + rootDirectoryHandle.name;
-        folderTreeContainer.innerHTML = "";
-        document.getElementById("editorTitle").textContent = "No file selected";
-        document.getElementById("editorContent").innerHTML = "";
-        editableFilesMap.clear();
-        currentFileHandle = null;
-
-        // Build pruned structure (only keeps directories with .weapon/.upgrades inside or in subfolders)
-        const structure = await buildFolderStructure(rootDirectoryHandle);
-        if (!structure) {
-          folderTreeContainer.innerHTML = "<p>No editable files found in that folder.</p>";
-          resetAllBtn.classList.add("hidden");
-          return;
-        }
-        folderStructure = structure;
-        // Render
-        renderFolderTree(folderStructure, folderTreeContainer);
-        resetAllBtn.classList.remove("hidden");
-
-      } catch (err) {
-        console.error("Folder selection error:", err);
-        statusMsg.textContent = "Failed to access folder.";
-      }
-    });
-
-    resetAllBtn.addEventListener("click", async () => {
-      // Confirm?
-      const sure = confirm("Reset ALL editable files to their default values? This overwrites changes on disk.");
-      if (sure) {
-        await resetAllToDefault();
-        alert("All files reverted to default.");
-      }
-    });
   });
+
+  resetAllBtn.addEventListener("click", async () => {
+    const sure = confirm("Reset ALL editable files to default values on disk?");
+    if (sure) {
+      await resetAllToDefault();
+    }
+  });
+
+  searchInput.addEventListener("input", (e) => {
+    onSearchChange(e.target.value);
+  });
+});
 </script>
 </body>
 </html>
